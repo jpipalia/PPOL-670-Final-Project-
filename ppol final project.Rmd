@@ -1,0 +1,31 @@
+---
+title: "PPOL670 FINAL PROJECT"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Packages
+
+```{r}
+require(tidyverse) #loads the package tidyverse
+require(caret) #loads the package caret
+require(lubridate) #loads the package lubridate
+require(ggplot2) #loads the package ggplot2
+require(recipes) #loads the package recipes
+require(rattle) # For nice tree plots
+
+```
+
+
+## Importing Data 
+
+sample_adult_raw = read_csv("Raw Data/samadult.csv") #imports data into the R memory 
+
+## Creating dataset
+
+dataset = sample_adult_raw %>% select(AFLHCA17,RECTYPE,REGION,SEX,HISPAN_I,AGE_P,R_MARITL,DOINGLWA,HYPYR1,HYPMED2,CHLYR,CHLMDNW2,MIEV,STREV,COPDEV,AASMYR,CANEV,PREGEVER,DIBEV1,EPILEP1,ABLIND,SMKNOW,ALC12MWK,AHEIGHT,AWEIGHTP,AHCAFYR2,AHCDLYR5,AHCSYR1,FLUVACYR,AHEP,AINDPRCH,MBO_MAN1,MBO_MND1,MBO_SPR1,YTQU_YG1)
+
+
