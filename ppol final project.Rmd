@@ -16,16 +16,287 @@ require(lubridate) #loads the package lubridate
 require(ggplot2) #loads the package ggplot2
 require(recipes) #loads the package recipes
 require(rattle) # For nice tree plots
-
+require(ranger) # loads the package ranger
 ```
 
 
 ## Importing Data 
 
+
+```{r}
+
 sample_adult_raw = read_csv("Raw Data/samadult.csv") #imports data into the R memory 
+person_raw = read_csv("Raw Data/personsx.csv") #imports data into the R memory 
+
+
+```
 
 ## Creating dataset
 
-dataset = sample_adult_raw %>% select(AFLHCA17,RECTYPE,REGION,SEX,HISPAN_I,AGE_P,R_MARITL,DOINGLWA,HYPYR1,HYPMED2,CHLYR,CHLMDNW2,MIEV,STREV,COPDEV,AASMYR,CANEV,PREGEVER,DIBEV1,EPILEP1,ABLIND,SMKNOW,ALC12MWK,AHEIGHT,AWEIGHTP,AHCAFYR2,AHCDLYR5,AHCSYR1,FLUVACYR,AHEP,AINDPRCH,MBO_MAN1,MBO_MND1,MBO_SPR1,YTQU_YG1)
+```{r}
+#creating datasets by selecting variables of interest from raw data
+
+dataset_adult = sample_adult_raw %>% select(AFLHCA17,RECTYPE,REGION,SEX,HISPAN_I,AGE_P,R_MARITL,DOINGLWA,HYPYR1,HYPMED2,CHLYR,CHLMDNW2,MIEV,STREV,COPDEV,AASMYR,CANEV,PREGEVER,DIBEV1,EPILEP1,ABLIND,SMKNOW,ALC12MWK,AHEIGHT,AWEIGHTP,AHCAFYR2,AHCDLYR5,AHCSYR1,FLUVACYR,AHEP,AINDPRCH,MBO_MAN1,MBO_MND1,MBO_SPR1,YTQU_YG1)
+
+dataset_person = person_raw %>% select(RECTYPE,ERNYR_P,PLBORN,FHIKDBB,FHIKDBD,HISTOP2,HISTOP1,PHSTAT)
+
+```
 
 
+## Merging the datasets
+
+```{r}
+final_dataset = full_join(dataset_adult,dataset_person,by="RECTYPE")
+final_dataset=as_tibble(final_dataset)
+sapply(colnames(final_dataset), function(x) class(final_dataset[[x]])) #Gives us the class of each variable
+
+```
+
+## Renaming Variables
+
+```{r eval=FALSE, include=FALSE}
+
+select(final_dataset, AFLHCA17 = occur, RECTYPE,REGION,SEX,HISPAN_I,AGE_P,R_MARITL,DOINGLWA,HYPYR1,HYPMED2,CHLYR,CHLMDNW2,MIEV,STREV,COPDEV,AASMYR,CANEV,PREGEVER,DIBEV1,EPILEP1,ABLIND,SMKNOW,ALC12MWK,AHEIGHT,AWEIGHTP,AHCAFYR2,AHCDLYR5,AHCSYR1,FLUVACYR,AHEP,AINDPRCH,MBO_MAN1,MBO_MND1,MBO_SPR1,YTQU_YG1,RECTYPE,ERNYR_P,PLBORN,FHIKDBB,FHIKDBD,HISTOP2,HISTOP1,PHSTAT)
+
+```
+
+
+## Partioning the dataset
+
+```{r}
+## 75% of the sample size
+smp_size <- floor(0.75 * nrow(final_dataset))
+
+## Creating partion
+set.seed(123)
+train_ind <- sample(seq_len(nrow(final_dataset)), size = smp_size)
+
+train_data <- final_dataset[train_ind, ] #creates training dataset
+test_data <- final_dataset[-train_ind, ] #creates test dataset
+```
+
+## Summarizing the variables in the training dataset
+
+```{r}
+summary(train_data) #gives a summary of each variable in test_data
+```
+
+## Graphing histogram for each variable
+ 
+```{r,fig.height=50,fig.width=8}
+train_data %>% 
+  select_if(is.numeric) %>% 
+  gather(var,val) %>% 
+  ggplot(aes(val,group=var)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~var,scales="free",ncol=3) #plots a histogram for each numeric variable
+
+
+```
+## Investigating Missing Values and Class of Variables
+
+```{r}
+
+sum(is.na(train_data)) #Calculates the number of missing values in the the dataset 'train_data'
+
+```
+
+### Creating recipe 'rcp' to pre-process our data 
+
+```{r}
+# Generate our recipe to preprocess the data 
+
+rcp <- recipe(AFLHCA17~.,final_dataset) %>% step_meanimpute(all_numeric()) %>% step_center(all_numeric()) %>% step_scale(all_numeric()) %>% prep()
+
+rcp
+# Apply the recipe to the training and test data
+
+train_data2 <- bake(rcp,train_data)
+
+test_data2= bake(rcp,test_data)
+```
+
+## Glimpsing data
+
+```{r}
+glimpse(train_data2) #gives a glimpse of the dataset train_data2
+glimpse(test_data2) #gives a glimpse of the dataset test_data2
+
+```
+
+## Creating Folds
+
+```{r}
+set.seed(1988) # set a seed for replication purposes 
+
+
+folds <- createFolds(train_data2$AFLHCA17 , k = 5) # Partition the data into 5 equal folds
+
+sapply(folds,length) #displays the folds with their length. 
+
+control_conditions <- 
+  trainControl(method='cv', # K-fold cross validation
+               index = folds # The indices for our folds (so they are always the same)
+  )
+```
+
+## Running a Linear Regression on AFLHCA17  with all other variables in train_data2
+
+```{r}
+mod_lm <-
+  train(AFLHCA17  ~ .,          # Equation (outcome and everything else)
+        data=train_data2, # Training data 
+        method = "lm",    # linear model
+        metric = "RMSE",   # mean squared error
+        trControl = control_conditions # Cross validation conditions
+  )
+```
+
+### Printing the results of the linear model
+```{r}
+mod_lm #prints the result of the linear model
+```
+  
+## K-Nearest Neighbors with tuning parameters k=1,5,10, and 50
+
+```{r}
+
+knn_tune = expand.grid(k = c(1,5,10,50))
+
+mod_knn <-
+  train(AFLHCA17  ~ .,           # Equation (outcome and everything else)
+        data=train_data2,  # Training data 
+        method = "knn",    # K-Nearest Neighbors Algorithm
+        metric = "RMSE",   # mean squared error
+        trControl = control_conditions, # Cross validation conditions
+        tuneGrid = knn_tune # vary tuning parameter K
+  )
+```
+  
+### Printing the results of the KNN model  
+```{r}
+mod_knn #Prints the results of the KNN model
+```
+
+### Plotting the KNN model
+
+```{r}
+plot(mod_knn) #plots the knn model
+```
+
+## Classification and Regression Trees (CART)
+
+```{r}
+mod_cart <-
+   train(AFLHCA17 ~ .,            # Equation (outcome and everything else)
+        data=train_data2,    # Training data 
+        method = "rpart",    # Regression tree
+        metric = "RMSE",     # mean squared error
+        trControl = control_conditions # Cross validation conditions
+  )
+```
+
+### Printing the results of the CART 
+
+```{r}
+mod_cart #prints the results of the CART 
+```
+
+### Graphing the CART
+
+```{r}
+plot(mod_cart) #Graphs the CART
+```
+
+
+### Visualizing the Tree
+
+```{r}
+fancyRpartPlot(mod_cart$finalModel) #Plots the Tree
+```
+
+### Let's try to model a tree with depth 0.0002
+
+```{r}
+tune_cart <- expand.grid(cp = c(0.0002)) # Complexity Parameter (how "deep" our trees should grow)
+mod_cart2 <-
+  train(AFLHCA17 ~ ., # Equation (outcome and everything else)
+        data=train_data2, # Training data 
+        method = "rpart", # Classification Tree
+        metric = "RMSE",     # mean squared error
+        tuneGrid = tune_cart, # Tuning parameters
+        trControl = control_conditions  )
+```
+
+### Printing the results of the tuned Tree
+
+```{r}
+
+print(tune_cart)
+
+```
+
+### Random Forest
+
+```{r}
+
+tunegrid <- expand.grid(mtry=c(2,4,6), splitrule=c("variance", "extratrees"), min.node.size=c(5))
+
+mod_rf <-
+  train(AFLHCA171 ~ ., # Equation (outcome and everything else)
+        data=train_data2, # Training data 
+        method = "ranger", # random forest (ranger is much faster than rf)
+        metric = "RMSE",     # mean squared error
+        trControl = control_conditions,
+        tuneGrid=tunegrid
+  )
+```
+1
+
+
+### Printing the Random Forest Model
+```{r}
+mod_rf
+```
+
+### Ploting the Random Forest Model
+
+```{r}
+plot(mod_rf)
+```
+
+## Summarizing all the models 
+
+```{r}
+# Organize all model imputs as a list.
+mod_list <-
+  list(
+    lm = mod_lm,
+    knn = mod_knn,
+    cart = mod_cart,
+    cart_deep = mod_cart2,
+    rf = mod_rf 
+  )
+
+# Resamples allows us to compare model output
+resamples(mod_list)
+```
+
+### Examine the error across each of the five models.
+```{r,fig.width=10,fig.height=4}
+dotplot(resamples(mod_list),metric = "RMSE")
+```
+
+### Examine the fit across each of the five models.
+```{r,fig.width=10,fig.height=4}
+dotplot(resamples(mod_list),metric = "Rsquared") #plots a dot plot with all five models
+```
+
+## Testing the Predictive Accuracy of the Random Forest Model 
+
+
+```{r}
+pred <- predict(mod_rf,newdata = test_data2)
+mse = sum(test_data2$PRICE-pred^2)/nrow(test_data2) #calculates object 'mse'
+mse 
+``` 
