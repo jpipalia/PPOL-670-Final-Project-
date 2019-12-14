@@ -22,6 +22,7 @@ require(ggthemes) #loads the package ggthemes
 require(mice) #loads the package mice
 require(fastDummies) #For quickly creating dummy variables
 require(dendroTools) #For quickly rounding numbers
+require(kernlab) #For Running SVM models
 ```
 
 
@@ -296,16 +297,26 @@ test_data1= bake(rcp1,test_data)
 
 # Converting factor variables to dummy variable for each level
 
-train_data2 <- fastDummies::dummy_cols(train_data1, remove_first_dummy = TRUE)
+train_data2 <- fastDummies::dummy_cols(train_data1, remove_first_dummy = TRUE) 
+
 test_data2 <- fastDummies::dummy_cols(test_data1, remove_first_dummy = TRUE)
 
 #Dropping Factor variables except for the dependent variable
 
-train_data2= train_data2 %>% select(-REGION,-SEX,-HISPAN_I,-RACERPI2,-R_MARITL,-DOINGLWA,-HYPYR1,-CHLYR,-MIEV,-STREV,-COPDEV,-CANEV,-PREGEVER,-DIBEV1,-EPILEP1,-SMKNOW,-ALC12MWK,-AHCAFYR2,-AHCSYR1,-AINDPRCH,-MBO_MAN1,-MBO_MND1,-YTQU_YG1,-ERNYR_P,-PLBORN,-PHSTAT)
+train_data2= train_data2 %>% select(-REGION,-SEX,-HISPAN_I,-RACERPI2,-R_MARITL,-DOINGLWA,-HYPYR1,-CHLYR,-MIEV,-STREV,-COPDEV,-CANEV,-PREGEVER,-DIBEV1,-EPILEP1,-SMKNOW,-ALC12MWK,-AHCAFYR2,-AHCSYR1,-AINDPRCH,-MBO_MAN1,-MBO_MND1,-YTQU_YG1,-ERNYR_P,-PLBORN,-PHSTAT,-occurrence_1)
 
-test_data2= test_data2 %>% select(-REGION,-SEX,-HISPAN_I,-RACERPI2,-R_MARITL,-DOINGLWA,-HYPYR1,-CHLYR,-MIEV,-STREV,-COPDEV,-CANEV,-PREGEVER,-DIBEV1,-EPILEP1,-SMKNOW,-ALC12MWK,-AHCAFYR2,-AHCSYR1,-AINDPRCH,-MBO_MAN1,-MBO_MND1,-YTQU_YG1,-ERNYR_P,-PLBORN,-PHSTAT)
+test_data2= test_data2 %>% select(-REGION,-SEX,-HISPAN_I,-RACERPI2,-R_MARITL,-DOINGLWA,-HYPYR1,-CHLYR,-MIEV,-STREV,-COPDEV,-CANEV,-PREGEVER,-DIBEV1,-EPILEP1,-SMKNOW,-ALC12MWK,-AHCAFYR2,-AHCSYR1,-AINDPRCH,-MBO_MAN1,-MBO_MND1,-YTQU_YG1,-ERNYR_P,-PLBORN,-PHSTAT,-occurrence_1)
 ```
 
+```{r}
+#Changing names of the levels on dependent variable occurrence
+levels(train_data2$occurrence)
+
+levels(train_data2$occurrence) <- c("Not_occur", "occur") #occur = depresssion/anxiety occured, Not_occur = depresssion/anxiety did not occur
+
+test_data2=test_data2 %>% select(-DOINGLWA_NA,-AHCAFYR2_NA,-SMKNOW_NA)
+
+```
 
 
 ## Glimpsing data
@@ -323,46 +334,51 @@ glimpse(test_data2) #gives a glimpse of the dataset test_data2
 set.seed(1988) # set a seed for replication purposes 
 
 
-folds <- createFolds(train_data2$occurence , k = 5) # Partition the data into 5 equal folds
+folds <- createFolds(train_data2$occurrence , k = 10) # Partition the data into 10 equal folds
 
 sapply(folds,length) #displays the folds with their length. 
 
 control_conditions <- 
   trainControl(method='cv', # K-fold cross validation
+               summaryFunction = twoClassSummary, # Need this b/c it's a classification problem
+               classProbs = TRUE, # Need this b/c it's a classification problem
                index = folds # The indices for our folds (so they are always the same)
   )
 ```
 
-## Running a Linear Regression on AFLHCA17  with all other variables in train_data2
+## Running a Logistic Regression on occurrence  with all other variables in train_data2
 
 ```{r}
-mod_lm <-
-  train(occurence  ~ .,          # Equation (outcome and everything else)
+
+
+mod_logit <-
+  train(occurrence ~ ., 
         data=train_data2, # Training data 
-        method = "lm",    # linear model
-        metric = "RMSE",   # mean squared error
-        trControl = control_conditions # Cross validation conditions
+        method = "glm", # logit function
+        metric = "ROC", # area under the curve
+        trControl = control_conditions
   )
+?make.names
+  
 ```
 
 ### Printing the results of the linear model
 ```{r}
-mod_lm #prints the result of the linear model
+mod_logit #prints the result of the linear model
 ```
   
-## K-Nearest Neighbors with tuning parameters k=1,5,10, and 50
+## K-Nearest Neighbors 
 
-```{r}
-
-knn_tune = expand.grid(k = c(1,5,10,50))
+```{r} 
+#Runs a KNN Model for classification
 
 mod_knn <-
-  train(occurence  ~ .,           # Equation (outcome and everything else)
-        data=train_data2,  # Training data 
-        method = "knn",    # K-Nearest Neighbors Algorithm
-        metric = "RMSE",   # mean squared error
-        trControl = control_conditions, # Cross validation conditions
-        tuneGrid = knn_tune # vary tuning parameter K
+  train(coverage ~ ., # Equation (outcome and everything else)
+        data=train_data3, # Training data 
+        method = "knn", # K-Nearest Neighbors Algorithm
+        metric = "ROC", # area under the curve
+        trControl = control_conditions
+  
   )
 ```
   
@@ -377,16 +393,52 @@ mod_knn #Prints the results of the KNN model
 plot(mod_knn) #plots the knn model
 ```
 
+## Tuning KNN
+
+```{r}
+#Setting tuning parameters
+knn_tune = expand.grid(k = c(1,3,10,50)) #
+knn_tune
+```
+
+```{r}
+#Running KNN with tuning parameters
+
+mod_knn2 <-
+  train(occurrence ~ ., # Equation (outcome and everything else)
+        data=train_data2, # Training data 
+        method = "knn", # K-Nearest Neighbors Algorithm
+        metric = "ROC", # area under the curve
+        tuneGrid = knn_tune, # add the tuning parameters here 
+        trControl = control_conditions
+  )
+```
+
+```{r}
+#Display results of KNN tunning model
+
+mod_knn2
+```
+
+
+```{r}
+#plots the tunning knn model
+plot(mod_knn2)
+
+```
+
+
 ## Classification and Regression Trees (CART)
 
 ```{r}
 mod_cart <-
-   train(occurence ~ .,            # Equation (outcome and everything else)
-        data=train_data2,    # Training data 
-        method = "rpart",    # Regression tree
-        metric = "RMSE",     # mean squared error
-        trControl = control_conditions # Cross validation conditions
+  train(occurrence ~ ., # Equation (outcome and everything else)
+        data=train_data2, # Training data 
+        method = "rpart", # Classification Tree
+        metric = "ROC", # area under the curve
+        trControl = control_conditions
   )
+
 ```
 
 ### Printing the results of the CART 
@@ -411,7 +463,7 @@ fancyRpartPlot(mod_cart$finalModel) #Plots the Tree
 ### Let's try to model a tree with depth 0.006
 
 ```{r}
-tune_cart <- expand.grid(cp = c(0.006)) # Complexity Parameter (how "deep" our trees should grow)
+tune_cart <- expand.grid(cp = c(0.03)) # Complexity Parameter (how "deep" our trees should grow)
 mod_cart2 <-
   train(occurence ~ ., # Equation (outcome and everything else)
         data=train_data2, # Training data 
@@ -433,15 +485,13 @@ print(tune_cart)
 
 ```{r}
 
-tunegrid <- expand.grid(mtry=c(2,4,6), splitrule=c("variance", "extratrees"), min.node.size=c(5))
-
 mod_rf <-
-  train(occurence ~ ., # Equation (outcome and everything else)
+  train(occurrence ~ ., # Equation (outcome and everything else)
         data=train_data2, # Training data 
         method = "ranger", # random forest (ranger is much faster than rf)
-        metric = "RMSE",     # mean squared error
-        trControl = control_conditions,
-        tuneGrid=tunegrid
+        metric = "ROC", # area under the curve
+        trControl = control_conditions
+  
   )
 ```
 1
@@ -458,38 +508,95 @@ mod_rf
 plot(mod_rf)
 ```
 
-## Summarizing all the models 
+## Running a SVM Model
+
+```{r}
+#Runs SVM liner model
+
+mod_svm_linear <-
+  train(occurrence ~ .,
+        data=train_data2, # Training data 
+         method = "svmLinear", # SVM with a polynomial Kernel
+        metric = "ROC", # area under the curve
+        tuneGrid = expand.grid(C = c(.5,1)), # Add two tuning parameters
+        trControl = control_conditions
+  )
+
+```
+
+```{r}
+#Displays SVM model results
+mod_svm_linear
+```
+
+## Running a Polynomial Boundary
+
+```{r}
+#Runs SVM liner model
+mod_svm_poly <-
+  train(occurrence ~.,
+        data=train_data2, # Training data 
+         method = "svmPoly", # SVM with a polynomial Kernel
+        metric = "ROC", # area under the curve
+        trControl = control_conditions
+  )
+mod_svm_poly #Displays results from Polynomial Boundry
+```
+
+## Runnig Radial Boundary 
+
+```{r}
+#Runs the SVM Radial Boundary Model
+mod_svm_radial <-
+  train(occurrence ~ .,
+        data=train_data2, # Training data 
+         method = "svmPoly", # SVM with a Radial Kernel
+        metric = "ROC", # area under the curve
+        trControl = control_conditions
+  )
+
+mod_svm_radial #Displays results from Radial Boundry
+```
+
+
+## Model Comparison
 
 ```{r}
 # Organize all model imputs as a list.
 mod_list <-
   list(
-    lm = mod_lm,
-    
-    cart = mod_cart,
-    cart_deep = mod_cart2,
-    rf = mod_rf 
+    mod_logit,
+    knn1 = mod_knn,
+    knn2 = mod_knn2,
+    cart1 = mod_cart,
+    rf = mod_rf,
+    svm_linear = mod_svm_linear,
+    svm_poly = mod_svm_poly,  
+    svm_radial = mod_svm_radial 
   )
 
-# Resamples allows us to compare model output
-resamples(mod_list)
+# Generate Plot to compare output. 
+dotplot(resamples(mod_list))
 ```
 
 ### Examine the error across each of the five models.
 ```{r,fig.width=10,fig.height=4}
-dotplot(resamples(mod_list),metric = "RMSE")
+#plots a each model and it's ROC
+
+dotplot(resamples(mod_list),metric = "ROC")
 ```
 
-### Examine the fit across each of the five models.
-```{r,fig.width=10,fig.height=4}
-dotplot(resamples(mod_list),metric = "Rsquared") #plots a dot plot with all five models
-```
 
 ## Testing the Predictive Accuracy of the Random Forest Model 
 
 
 ```{r}
 pred <- predict(mod_rf,newdata = test_data2)
-mse = sum(test_data2$occurence-pred^2)/nrow(test_data2) #calculates object 'mse'
-mse 
+
+summarypred=summary(pred)
+
+summarypred
+
+skimr::skim(pred)
+
 ``` 
