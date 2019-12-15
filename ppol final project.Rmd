@@ -1,15 +1,51 @@
 ---
 title: "PPOL670 FINAL PROJECT"
-output: pdf_document
+output: 
+ pdf_document:
+ toc: true
+fontsize: 12pt
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## Packages
+# **Predicting Depression and Anxiety using Supervised Learning Models**
+### *Jagir Pipalia*
 
-```{r}
+*******
+
+## **Introduction**
+
+In 2015, over 43 million adults had a mental illness, and nearly 10 million had a serious mental illness, such as depression, bipolar disorder, or schizophrenia . People with mental health conditions often have chronic medical conditions, significant health care services utilization, and barriers to employment, and are frequently involved with the criminal justice system.[^fn1] 
+
+In this paper I used data from the National Health Interview Survey to generate a supervised learning model that predicts the occurrence of depression, anxiety, or emotional problems among respondents.
+
+I utilize the National Health Interview Survey to identify datasets that contain variables that are relevant in predicting the occurence of depression and anxiety. I explored the datasets to determine the variables that may predict the occurence of depression and anxiety. I import the variables in R to create a R dataset. I than take a random sample from the dataset for building a supervised learning models to predict the occurence of depression and anxiety. I compared the models to find the model with the best predictive ability.    
+
+*******
+
+## **Problem Statement and Background**
+
+Depression is among the leading causes of disability in industrialized countries.To effectively target interventions for patients at risk for a worse long-term clinical outcome, there is a need to identify predictors of chronicity and remission at an early stage. This could allow a quicker escalation of treatment for patients with a low long-term chance of recovery, thus potentially avoiding initial treatment resistance.[^fn2]  
+
+Neuroscientists and clinicians around the world are using machine learning to develop treatment plans for patients and to identify some of the key markers for mental health disorders before they may set in. One of the benefits is that machine learning helps clinicians predict who may be at risk of a particular disorder.There is so much data available that we are now able to compile data for mental health professionals so they may do their job better. What makes machine learning so helpful today is that in the past, understanding of diagnoses were based off group averages and statistics over populations. Machine learning gives clinicians the opportunity to personalize.[^fn3]
+
+David and colleagues use a layered, hierarchical model for translating raw sensor data into markers of behaviors and states related to mental health.[^fn4] 
+
+Through this project, I aim to create a supervised learning model that can accurately predict if a person is at risk of experiencing depression or anxiety. I take health variables on several diseases such as Hypertension, Cholestrol, COPD, Diebetes, etc and combine it with a person's age, weight, race, and region they combine along with other variables to predict the occurence of depression or anxiety. 
+
+*******
+
+## **Data**
+
+The data for the project comes from The National Health Interview Survey (NHIS). NHIS has monitored the health of the nation since 1957. NHIS data on a broad range of health topics, including mental health conditions, are collected through personal household interviews. The U.S. Census Bureau has been the data collection agent for the National Health Interview Survey. Survey results have been instrumental in providing data to track health status, health care access, and progress toward achieving national health objectives. 
+
+The unit of observation is survey participant. Each participant is an observation. I selected 30 variables from the NHIS datasets that seemed relevant to the question. There were 104874 observations in total. The variable of interest was AFLHCA17 which is marker for if depression, anxiety, or emotional problems caused difficulty with activity.
+
+Most of the variables are categorical values. Some variables appear to be continues variables. There is a lot of missing data, so I will impute the missing data.
+
+```{r include=FALSE}
 require(tidyverse) #loads the package tidyverse
 require(caret) #loads the package caret
 require(lubridate) #loads the package lubridate
@@ -23,13 +59,13 @@ require(mice) #loads the package mice
 require(fastDummies) #For quickly creating dummy variables
 require(dendroTools) #For quickly rounding numbers
 require(kernlab) #For Running SVM models
+require(stargazer) #loads stargazer package
+
 ```
 
 
-## Importing Data 
 
-
-```{r}
+```{r include=FALSE}
 
 sample_adult_raw = read_csv("Raw Data/samadult.csv") #imports data into the R memory 
 person_raw = read_csv("Raw Data/personsx.csv") #imports data into the R memory 
@@ -37,9 +73,8 @@ person_raw = read_csv("Raw Data/personsx.csv") #imports data into the R memory
 
 ```
 
-## Creating dataset
 
-```{r}
+```{r  include=FALSE}
 #creating datasets by selecting variables of interest from raw data
 
 dataset_adult = sample_adult_raw %>% select(AFLHCA17,RECTYPE,REGION,SEX,HISPAN_I,RACERPI2,AGE_P,R_MARITL,DOINGLWA,HYPYR1,CHLYR,MIEV,STREV,COPDEV,CANEV,PREGEVER,DIBEV1,EPILEP1,SMKNOW,ALC12MWK,AHCAFYR2,AHCSYR1,AINDPRCH,MBO_MAN1,MBO_MND1,YTQU_YG1,AHEIGHT,AWEIGHTP)
@@ -49,23 +84,21 @@ dataset_person = person_raw %>% select(RECTYPE,ERNYR_P,PLBORN,PHSTAT)
 ```
 
 
-## Merging the datasets
 
-```{r}
+```{r  include=FALSE}
+#merging the two datasets
 final_dataset_raw = full_join(dataset_person,dataset_adult,by="RECTYPE")
 sapply(colnames(final_dataset_raw), function(x) class(final_dataset_raw[[x]])) #Gives us the class of each variable
 
 ```
 
-## Dropping RECTYPE
-```{r}
+```{r  include=FALSE}
 #Dropiing Variable RECTYPE as it is an record identifier and was used to merge datasets
 final_dataset_raw=final_dataset_raw  %>% select(-RECTYPE)
 ```
 
-## Recoding Dependent Variable
 
-```{r}
+```{r  include=FALSE}
 final_dataset_raw=mutate(final_dataset_raw,
        occurrence = AFLHCA17 == '1',
        occurrence = as.numeric(occurrence)) #Creating a new variable 'occurrence' based on AFLHCA17
@@ -74,19 +107,22 @@ final_dataset_raw=final_dataset_raw  %>% select(-AFLHCA17) #Dropping the variabl
 ```
 
 
-
-## Taking a Random Sample from Data
-
-```{r}
+```{r  include=FALSE}
 final_dataset=final_dataset_raw %>% sample_n(10000) # Only taking a random sample of the data so the models run quicker
 head(final_dataset) # Peek at the data just to make sure everything was read in correctly. 
 
 
 ```
 
-## Partioning the dataset
 
-```{r}
+```{r include=FALSE}
+# Gives a summary of all the variables in the dataset
+glimpse(final_dataset)
+
+```
+
+
+```{r  include=FALSE}
 ## 75% of the sample size
 smp_size <- floor(0.75 * nrow(final_dataset))
 
@@ -98,15 +134,23 @@ train_data <- final_dataset[train_ind, ] #creates training dataset
 test_data <- final_dataset[-train_ind, ] #creates test dataset
 ```
 
-## Summarizing the variables in the training dataset
-
-```{r}
+```{r include=FALSE}
 skimr::skim(train_data) #Gives a summary statics of all the variables in train_data
 ```
 
-## Graphing histogram for Age variable
+### **Data Wrangling**
+
+I first imported the datasets 'dataset_adult' and 'dataset_person'. I then selected the following variables using the tidyverse package:
+
+AFLHCA17,RECTYPE,REGION,SEX,HISPAN_I,RACERPI2,AGE_P,R_MARITL,DOINGLWA,HYPYR1,CHLYR,MIEV,STREV,COPDEV,CANEV,PREGEVER,DIBEV1,EPILEP1,SMKNOW,ALC12MWK,AHCAFYR2,AHCSYR1,AINDPRCH,MBO_MAN1,MBO_MND1,YTQU_YG1,AHEIGHT,AWEIGHTP,RECTYPE,ERNYR_P,PLBORN,and PHSTAT
+
+I then merged the two datasets using 'full_join' function to form the 'final_dataset_raw'.In order to minimize the time to run the machine learning models, I took a random sample of 10,000 observations from 'final_dataset_raw'.The sample was named 'final_dataset'. I divided the 'final_dataset' into training data and test data. Training data has 75% of the observations while test data has the remaining 25% of the data. 
+
+### **Vizualizations for Independent Variables**
+
+Following are vizualizations for some of the indepedent variables. As we can see from the density graph for Age variable. Majority of participants seem to be above 50 years of age. 
  
-```{r,}
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a density graph for Age
 train_data %>% 
   select(AGE_P) %>% 
@@ -119,9 +163,10 @@ ylab("Frequency")+# for the y axis label
 
 
 ```
-## Graphing histogram for Height variable
- 
-```{r,}
+
+From the bar graph below for Height variable, we can see that there are some outliers.
+
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a histogram for Height
 train_data %>% 
   select(AHEIGHT) %>% 
@@ -135,9 +180,9 @@ ylab("Frequency")+ # for the y axis label
 
 ```
 
-## Graphing histogram for Weight variable
- 
-```{r,}
+Similarly, as evident in the histogram below, the Weight variable also has some outliers:
+
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a histogram for Weight
 train_data %>% 
   select(AWEIGHTP) %>% 
@@ -152,8 +197,9 @@ ylab("Frequency")+# for the y axis label
 ```
 
 
-## Graphing categorical variables
-```{r}
+Following is a bar graph for Region variable. The highest number of observations were from the South region.
+
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a bar graph for Region variable
 train_data %>% 
   mutate(REGION_bins = case_when(
@@ -170,8 +216,9 @@ ylab("Frequency")+
   
 ```
 
-## Graphing categorical variables
-```{r}
+Following is a bar graph for Sex variable. There are more females in the dataset than males.
+
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a bar graph for Sex variable
 train_data %>% 
   mutate(SEX_bins = case_when(
@@ -187,8 +234,9 @@ ylab("Frequency")+
   
 ```
 
-## Graphing categorical variables
-```{r}
+Following is a bar graph for Race variable. The highest number of observations are White.
+
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a bar graph for Race Variable
 train_data %>% 
   mutate(RACERPI2_bins = case_when(
@@ -208,8 +256,9 @@ ylab("Frequency")+
   
 ```
 
-## Graphing categorical variables
-```{r}
+Following is a bar graph for Earnings variable. There are significant number of observations that earn more than $75,000.
+
+```{r,fig.width=6,fig.height=4, echo=FALSE}
 # Creating a bar graph for Earnings
 train_data %>% 
   mutate(ERNYR_P_bins = case_when(
@@ -241,10 +290,9 @@ ylab("Frequency")+
   
 ```
 
-##Pre-Processing Data
 
-### Setting Categorical variables as factor variable
-```{r}
+
+```{r echo=FALSE}
 #Changing class of categorical variables to factor
 train_data=train_data %>% mutate(ERNYR_P = as.factor(ERNYR_P),
                              PLBORN = as.factor(PLBORN),
@@ -279,10 +327,14 @@ train_data=train_data %>% mutate(ERNYR_P = as.factor(ERNYR_P),
 
 ```
 
-### Creating recipe to impute missing data 
+### **Pre-Processing**
+
+As it can be seen from the above graphs, the sample has a high number of missing values. I generated a recipe using the recipes package to impute the missing data and scale the data. I also created a dummy variable for each level of the factor variables for each factor variable. 
+
+After processing the data using the recipe generated, the data was ready to be used in supervised learning models.
 
 
-```{r}
+```{r  include=FALSE}
 # Generating a recipe to impute missing data 
 
 rcp1 <- recipe(occurrence~.,train_data) %>% step_modeimpute(all_nominal()) %>% step_meanimpute(all_numeric()) %>% step_range(all_numeric()) %>% prep() 
@@ -308,29 +360,32 @@ train_data2= train_data2 %>% select(-REGION,-SEX,-HISPAN_I,-RACERPI2,-R_MARITL,-
 test_data2= test_data2 %>% select(-REGION,-SEX,-HISPAN_I,-RACERPI2,-R_MARITL,-DOINGLWA,-HYPYR1,-CHLYR,-MIEV,-STREV,-COPDEV,-CANEV,-PREGEVER,-DIBEV1,-EPILEP1,-SMKNOW,-ALC12MWK,-AHCAFYR2,-AHCSYR1,-AINDPRCH,-MBO_MAN1,-MBO_MND1,-YTQU_YG1,-ERNYR_P,-PLBORN,-PHSTAT,-occurrence_1)
 ```
 
-```{r}
+```{r  include=FALSE}
 #Changing names of the levels on dependent variable occurrence
 levels(train_data2$occurrence)
 
 levels(train_data2$occurrence) <- c("Not_occur", "occur") #occur = depresssion/anxiety occured, Not_occur = depresssion/anxiety did not occur
 
-test_data2=test_data2 %>% select(-DOINGLWA_NA,-AHCAFYR2_NA,-SMKNOW_NA)
-
 ```
 
 
-## Glimpsing data
 
-```{r}
+
+```{r  include=FALSE}
 glimpse(train_data2) #gives a glimpse of the dataset train_data2
 glimpse(test_data2) #gives a glimpse of the dataset test_data2
 
 ```
+*******
+
+## **Analysis**
+
+I started by setting cross-validation settings. I used k-fold validation. I used 10 folds as the training data contains 7500 observations. Each fold was about 750 observations. The dependent variable, occurence, in my analysis is a dummy variable which takes the value 1 when the observation experienced depression or anxiety. It takes the value 0 when the observation did not report experiencing depression or anxiety. 
+
+I began with my first model which was Logistic Regression, I set the metric to be 'ROC' as the dependent variable is a dummy variable. As we can see from the output, the ROC from the Logistic Regression is close 0.5, which is almost as good as a coin-toss. Therefore, I decided to use KNN model next.
 
 
-## Creating Folds
-
-```{r}
+```{r  include=FALSE}
 set.seed(1988) # set a seed for replication purposes 
 
 
@@ -346,9 +401,8 @@ control_conditions <-
   )
 ```
 
-## Running a Logistic Regression on occurrence  with all other variables in train_data2
 
-```{r}
+```{r  include=FALSE}
 
 
 mod_logit <-
@@ -358,50 +412,47 @@ mod_logit <-
         metric = "ROC", # area under the curve
         trControl = control_conditions
   )
-?make.names
-  
+
 ```
 
-### Printing the results of the linear model
-```{r}
+```{r echo=FALSE}
 mod_logit #prints the result of the linear model
 ```
   
-## K-Nearest Neighbors 
 
-```{r} 
+```{r  include=FALSE} 
 #Runs a KNN Model for classification
 
 mod_knn <-
-  train(coverage ~ ., # Equation (outcome and everything else)
-        data=train_data3, # Training data 
+  train(occurrence ~ ., # Equation (outcome and everything else)
+        data=train_data2, # Training data 
         method = "knn", # K-Nearest Neighbors Algorithm
         metric = "ROC", # area under the curve
         trControl = control_conditions
   
   )
 ```
+
+
   
-### Printing the results of the KNN model  
-```{r}
+```{r  include=FALSE}
 mod_knn #Prints the results of the KNN model
 ```
 
-### Plotting the KNN model
+As we can see from the output below, the KNN model with k=9, perfomed better than other knn models and also better than Logistic Regression.The ROC was close to 0.6. In order to see if the ROC would increase with a higher k, I run a tuned KNN model with the highest k equal to 50.
 
-```{r}
+```{r echo=FALSE}
 plot(mod_knn) #plots the knn model
 ```
 
-## Tuning KNN
 
-```{r}
+```{r  include=FALSE}
 #Setting tuning parameters
 knn_tune = expand.grid(k = c(1,3,10,50)) #
 knn_tune
 ```
 
-```{r}
+```{r  include=FALSE}
 #Running KNN with tuning parameters
 
 mod_knn2 <-
@@ -414,23 +465,22 @@ mod_knn2 <-
   )
 ```
 
-```{r}
+```{r  include=FALSE}
 #Display results of KNN tunning model
 
 mod_knn2
 ```
 
-
-```{r}
+As we can see, the ROC continues to improve with higher ks and reaches close to 0.75 when k=50. I run the CART and Random Forest models next to see how well they do in predicting occurrence.
+```{r echo=FALSE}
 #plots the tunning knn model
 plot(mod_knn2)
 
 ```
 
 
-## Classification and Regression Trees (CART)
 
-```{r}
+```{r  include=FALSE}
 mod_cart <-
   train(occurrence ~ ., # Equation (outcome and everything else)
         data=train_data2, # Training data 
@@ -441,49 +491,13 @@ mod_cart <-
 
 ```
 
-### Printing the results of the CART 
 
-```{r}
+```{r  include=FALSE}
 mod_cart #prints the results of the CART 
 ```
 
-### Graphing the CART
 
-```{r}
-plot(mod_cart) #Graphs the CART
-```
-
-
-### Visualizing the Tree
-
-```{r}
-fancyRpartPlot(mod_cart$finalModel) #Plots the Tree
-```
-
-### Let's try to model a tree with depth 0.006
-
-```{r}
-tune_cart <- expand.grid(cp = c(0.03)) # Complexity Parameter (how "deep" our trees should grow)
-mod_cart2 <-
-  train(occurence ~ ., # Equation (outcome and everything else)
-        data=train_data2, # Training data 
-        method = "rpart", # Classification Tree
-        metric = "RMSE",     # mean squared error
-        tuneGrid = tune_cart, # Tuning parameters
-        trControl = control_conditions  )
-```
-
-### Printing the results of the tuned Tree
-
-```{r}
-
-print(tune_cart)
-
-```
-
-### Random Forest
-
-```{r}
+```{r  include=FALSE}
 
 mod_rf <-
   train(occurrence ~ ., # Equation (outcome and everything else)
@@ -494,23 +508,22 @@ mod_rf <-
   
   )
 ```
-1
 
 
-### Printing the Random Forest Model
-```{r}
+
+```{r  include=FALSE}
 mod_rf
 ```
 
-### Ploting the Random Forest Model
+The CART model had an ROC of 0.5. The random forest model had a much higher ROC of 0.94 with 2 randomly selected variables and using gini splitting rule. I then run SVM models followed by a Polynomial Boundary and Radial boundary model. The SVM Model has a ROC close to 0.7 while the Polynomial Boundary and Radial Boundary models have ROC close to 0.81.
+ 
 
-```{r}
+```{r echo=FALSE}
 plot(mod_rf)
 ```
 
-## Running a SVM Model
 
-```{r}
+```{r  include=FALSE}
 #Runs SVM liner model
 
 mod_svm_linear <-
@@ -524,14 +537,13 @@ mod_svm_linear <-
 
 ```
 
-```{r}
+```{r  include=FALSE}
 #Displays SVM model results
 mod_svm_linear
 ```
 
-## Running a Polynomial Boundary
 
-```{r}
+```{r  include=FALSE}
 #Runs SVM liner model
 mod_svm_poly <-
   train(occurrence ~.,
@@ -543,9 +555,8 @@ mod_svm_poly <-
 mod_svm_poly #Displays results from Polynomial Boundry
 ```
 
-## Runnig Radial Boundary 
 
-```{r}
+```{r  include=FALSE}
 #Runs the SVM Radial Boundary Model
 mod_svm_radial <-
   train(occurrence ~ .,
@@ -557,11 +568,13 @@ mod_svm_radial <-
 
 mod_svm_radial #Displays results from Radial Boundry
 ```
+*******
 
+## **Results**
 
-## Model Comparison
+We ran Logistic Regression, KNN, KNN with tunning parameters, CART, Random Forest, SVM Linear, SVM Polynomial Boundary, and SVM Radial Boundary models. Following dotplot compares the performace of models with each other. As we can observe the random forest model performed the best in terms of ROC. The SVM models also performed very well.
 
-```{r}
+```{r echo=FALSE}
 # Organize all model imputs as a list.
 mod_list <-
   list(
@@ -578,25 +591,39 @@ mod_list <-
 # Generate Plot to compare output. 
 dotplot(resamples(mod_list))
 ```
+The following plot gives a closer look at comparision of ROC accross models
 
-### Examine the error across each of the five models.
-```{r,fig.width=10,fig.height=4}
+```{r,fig.width=10,fig.height=4, echo=FALSE}
 #plots a each model and it's ROC
 
 dotplot(resamples(mod_list),metric = "ROC")
 ```
 
 
-## Testing the Predictive Accuracy of the Random Forest Model 
+Since, the random forest model performed the best, we will use to predict the occurrence of dpression or anxiety in the test dataset.  As we can see from the results below, the model predicts 0 occurence of depression or anxiety in tre test dataset. 
 
-
-```{r}
+```{r echo=FALSE}
 pred <- predict(mod_rf,newdata = test_data2)
 
 summarypred=summary(pred)
 
 summarypred
 
-skimr::skim(pred)
 
 ``` 
+*******
+
+## **Discussion**
+
+Although the Random model and SVM models had a high ROC, we did not see a good prediction for occurrence from the test dataset. I think the project was partially successful as it was able to create a good predictive model for occurrence of depression or anxiety as it had high ROC but it was not good in actually predicting the occurrence from the test dataset. 
+
+I considered using a larger sample and variables with more variation, but due to time and computational constraints, I was not able do it. In the future, I plan to use a bigger sample along with more suitable variables which have a lower level of missing vlaues. 
+
+
+[^fn1]: KFF. (2019). Facilitating Access to Mental Health Services: A Look at Medicaid, Private Insurance, and the Uninsured. [online] Available at: https://www.kff.org/medicaid/fact-sheet/facilitating-access-to-mental-health-services-a-look-at-medicaid-private-insurance-and-the-uninsured/:~:targetText=The%20Medicaid%20program%20covers%20many,,%20counseling,%20and%20prescription%20medications.&targetText=The%20Medicaid%20expansion%20has%20enabled,obtain%20coverage%20and%20access%20treatment. [Accessed 12 Nov. 2019].
+
+[^fn2]: Dinga, R., Marquand, A. F., Veltman, D. J., Beekman, A., Schoevers, R. A., van Hemert, A. M., … Schmaal, L. (2018). Predicting the naturalistic course of depression from a wide range of clinical, psychological, and biological data: a machine learning approach. Translational psychiatry, 8(1), 241. doi:10.1038/s41398-018-0289-1
+
+[^fn3]: Abbas, N. (2019, August 29). Machine Learning and Mental Health Can Big Data help the Mental Health field? Retrieved December 13, 2019, from https://towardsdatascience.com/machine-learning-and-mental-health-7981a6001bd5.
+
+[^fn4]: Mohr, D. C., Zhang, M., & Schueller, S. M. (2017). Personal Sensing: Understanding Mental Health Using Ubiquitous Sensors and Machine Learning. Annual Review of Clinical Psychology, 13(1), 23–47. doi: 10.1146/annurev-clinpsy-032816-044949
